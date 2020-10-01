@@ -3,7 +3,26 @@
 **TODO**
 - [ ] add download instructions for PALSAR imagery
 - [ ] add list of SAR jargon terms
-- [ ] use just one big matrix, do operations in place, and save off small images at each stage instead of carrying around giant complex matrices from each stage of processing (`cimg`, `shiftedft`, ...)
+- [x] use just one big matrix, do operations in place, and save off small images at each stage instead of carrying around giant complex matrices from each stage of processing (`cimg`, `shiftedft`, ...)
+- [ ] Replace/augment the IPython notebook with a Pluto.jl notebook
+
+### Dependencies
+- **Julia:** You'll need a recent version of Julia, available for download [here](https://julialang.org/downloads/)
+- **Julia packages:** The necessary Julia packages can be installed by 
+  1. Starting a Julia shell by running `julia` in a terminal
+  2. Pressing the `]` key to enter the Julia `pkg` shell
+  3. Entering the following line:
+  
+      `add IJulia, ImageView, Serialization, FFTW`
+  4. Done! You can close the Julia shell
+
+- **RADAR samples:** I have included one set of radar recordings here, but more are available for free from ASF Vertex, a NASA website (signup required). See the *Acquiring RADAR Samples* section for details
+- **Computer:** This code is a big memory-hungry because of the size of these SAR images. It runs well enough on my 2015 MacBook Pro with 8 GB memory, but only if I close most programs and browser tabs. If you run into Julia kernel crashes during processing, try freeing up some RAM by closing any programs or tabs you aren't using at the moment. The code as-written also saves off a couple intermediate files about 750 MB in size, so make sure you have a couple spare gigabytes of storage space too.
+  
+### Producing Images
+**TODO**
+  
+run `using IJulia; notebook();` to launch the Jupyter notebook environment and you should
 
 ### Acquiring RADAR Samples
 This project performs the entire synthetic aperture radar image-forming process
