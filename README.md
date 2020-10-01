@@ -18,3 +18,8 @@ main repository for SAR data of all levels as far as I can tell.
 
 It's free to download SAR products from the ASF Vertex, but you do need to create an 
 account in order to download anything.
+
+I have included one L1.0 product from ALOS PALSAR in this repository
+courtesy of JAXA and the Japanese Ministry of Economy, Trade, and Industry (METI), which is permitted
+under the [Alaska Satellite Facility/ALOS PALSAR EULA](https://asf.alaska.edu/uncategorized/eula/) 
+provided the data is used for peaceful purposes and the attributing is given to JAXA/METI.
