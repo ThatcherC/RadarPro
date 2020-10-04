@@ -1,4 +1,8 @@
 # PALSAR Synthetic Aperature RADAR Processor
+In 2018 I wrote a synthetic aperture radar processing program as the final project for a class I was taking called [12.421 - Physical Principles of Remote Sensing](http://student.mit.edu/catalog/m12a.html#12.421). 
+With an abundance of spare time in 2020, I have re-worked version of that program and made it ready to share! The code here performs the task of *focusing* synthetic aperture radar (SAR) images - it converts the raw voltage readings from the radio receiver aboard JAXA's ALOS/PALSAR satellite to a (fairly) clear and high-resolution image of the Earth from space. 
+
+Right now the code all works well, but needs more commenting to explain the SAR focusing process. However, I've included my 12.421 [final paper](https://github.com/ThatcherC/RadarPro/blob/master/FinalReport/simple-zipped/SARPaper.pdf) in this repo which does a better job of explaining the details of the process. 
 
 **TODO**
 - [x] add download instructions for PALSAR imagery
@@ -7,7 +11,7 @@
 - [ ] Replace/augment the IPython notebook with a Pluto.jl notebook
 
 ### Dependencies
-- **Julia:** You'll need a recent version of Julia, available for download [here](https://julialang.org/downloads/)
+- **Julia:** You'll need a recent version of Julia, available for download [here](https://julialang.org/downloads/) (I'm using Julia 1.5)
 - **Julia packages:** The necessary Julia packages can be installed by 
   1. Starting a Julia shell by running `julia` in a terminal
   2. Pressing the `]` key to enter the Julia `pkg` shell
@@ -17,7 +21,7 @@
   4. Done! You can close the Julia shell
 
 - **RADAR samples:** I have included one set of radar recordings here, but more are available for free from ASF Vertex, a NASA website (signup required). See the *Acquiring RADAR Samples* section for details. To use the recording bundled with this repo,
-download the file `Cape.zip` from the Assets section of the [Releases] page.
+download the file `Cape.zip` from the Assets section of the [Releases](https://github.com/ThatcherC/RadarPro/releases) page.
 - **Computer:** This code is a big memory-hungry because of the size of these SAR images. It runs well enough on my 2015 MacBook Pro with 8 GB memory, but only if I close most programs and browser tabs. If you run into Julia kernel crashes during processing, try freeing up some RAM by closing any programs or tabs you aren't using at the moment. The code as-written also saves off a couple intermediate files about 750 MB in size, so make sure you have a couple spare gigabytes of storage space too.
   
 ### Producing Images
