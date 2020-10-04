@@ -1,7 +1,7 @@
 # PALSAR Synthetic Aperature RADAR Processor
 
 **TODO**
-- [ ] add download instructions for PALSAR imagery
+- [x] add download instructions for PALSAR imagery
 - [ ] add list of SAR jargon terms
 - [x] use just one big matrix, do operations in place, and save off small images at each stage instead of carrying around giant complex matrices from each stage of processing (`cimg`, `shiftedft`, ...)
 - [ ] Replace/augment the IPython notebook with a Pluto.jl notebook
@@ -16,7 +16,8 @@
       `add IJulia, ImageView, Serialization, FFTW`
   4. Done! You can close the Julia shell
 
-- **RADAR samples:** I have included one set of radar recordings here, but more are available for free from ASF Vertex, a NASA website (signup required). See the *Acquiring RADAR Samples* section for details
+- **RADAR samples:** I have included one set of radar recordings here, but more are available for free from ASF Vertex, a NASA website (signup required). See the *Acquiring RADAR Samples* section for details. To use the recording bundled with this repo,
+download the file `Cape.zip` from the Assets section of the [Releases] page.
 - **Computer:** This code is a big memory-hungry because of the size of these SAR images. It runs well enough on my 2015 MacBook Pro with 8 GB memory, but only if I close most programs and browser tabs. If you run into Julia kernel crashes during processing, try freeing up some RAM by closing any programs or tabs you aren't using at the moment. The code as-written also saves off a couple intermediate files about 750 MB in size, so make sure you have a couple spare gigabytes of storage space too.
   
 ### Producing Images
@@ -42,3 +43,5 @@ I have included one L1.0 product from ALOS PALSAR in this repository
 courtesy of JAXA and the Japanese Ministry of Economy, Trade, and Industry (METI), which is permitted
 under the [Alaska Satellite Facility/ALOS PALSAR EULA](https://asf.alaska.edu/uncategorized/eula/) 
 provided the data is used for peaceful purposes and the attributing is given to JAXA/METI.
+The L1.0 product I have done most of my testing on is available [here](https://github.com/ThatcherC/RadarPro/releases/download/initial/Cape.zip) - just unzip it into this repo's 
+directory on your computer.
