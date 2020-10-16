@@ -29,9 +29,16 @@ download the file `Cape.zip` from the Assets section of the [Releases](https://g
 - **Computer:** This code is a big memory-hungry because of the size of these SAR images. It runs well enough on my 2015 MacBook Pro with 8 GB memory, but only if I close most programs and browser tabs. If you run into Julia kernel crashes during processing, try freeing up some RAM by closing any programs or tabs you aren't using at the moment. The code as-written also saves off a couple intermediate files about 750 MB in size, so make sure you have a couple spare gigabytes of storage space too.
   
 ### Producing Images
-**TODO**
-  
-run `using IJulia; notebook();` to launch the Jupyter notebook environment and you should
+With Julia installed, start a Julia shell from a command line by typing `julia`. 
+Then, start the IJulia/IPython environment by typing running
+```
+julia> using IJulia; notebook();
+```
+(the "julia>" bit will already by present in the Julia shell and won't need to be typed)
+
+Running these commands should open your browser to an IPython page showing a file directory. From there, navigate to where you cloned this repo and open the `Palsar-Demo.ipynb` file to initialize that Julia notebook.
+
+In the notebook, click into the first cell and hit `Shift-Enter` repeatedly to execute each successive code block!
 
 ### Acquiring RADAR Samples
 This project performs the entire synthetic aperture radar image-forming process
