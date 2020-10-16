@@ -2,9 +2,9 @@
 In 2018 I wrote a synthetic aperture radar processing program as the final project for a class I was taking called [12.421 - Physical Principles of Remote Sensing](http://student.mit.edu/catalog/m12a.html#12.421). 
 With an abundance of spare time in 2020, I have re-worked version of that program and made it ready to share! The code here performs the task of *focusing* synthetic aperture radar (SAR) images - it converts the raw voltage readings from the radio receiver aboard JAXA's ALOS/PALSAR satellite to a (fairly) clear and high-resolution image of the Earth from space. 
 
-Raw                                            |  Focused
-:---------------------------------------------:|:-------------------------:
-![](FinalReport/simple-zipped/images/raw.png)  |  ![](FinalReport/simple-zipped/images/azcompcontrast.png)
+Raw                                            |  Focused                                                   | Full Resolution
+:---------------------------------------------:|:----------------------------------------------------------:|:--------------------------------------------------
+![](FinalReport/simple-zipped/images/raw.png)  |  ![](FinalReport/simple-zipped/images/azcompcontrast.png)  | ![](FinalReport/simple-zipped/images/full-res.png)
 
 Right now the code all works well, but needs more commenting to explain the SAR focusing process. However, I've included my 12.421 [final paper](https://github.com/ThatcherC/RadarPro/blob/master/FinalReport/simple-zipped/SARPaper.pdf) in this repo which does a better job of explaining the details of the process. 
 
