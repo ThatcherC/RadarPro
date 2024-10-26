@@ -133,276 +133,73 @@ md"""
 This stage converts a `.0__A` file downloaded from ASF Vertex into a serialized Julia object in a `.ser` file. Can be skipped if you've already produced a `.ser` file for the SAR image you want to process.
 """
 
+# ╔═╡ 8c0bd2ab-8b14-4375-bf7f-42e1e94dd6e4
+signalRecords = let
+	file = open("$pathname/$imagename.0__A")
+	
+	imageDescriptor = parseFile(file,imageFileDescrictorScheme)
+	sarDataBytes    = parse(Int64,imageDescriptor.fields[imageDescriptor.key["sarDataBytes"]])
+	numSignals      = parse(Int64,imageDescriptor.fields[imageDescriptor.key["numSignals"]])
+	
+	signalRecords = [ ]
+	
+	for i = 1:(numSignals-1)
+	    parsedRecord = parseFile(file,signalDataRecordScheme,720+sarDataBytes*i)
+	    signal = parsedRecord.fields[parsedRecord.key["signalData"]]
+	    
+	    #TODO  - is 15 or 16 better?? compute mean of signals?
+	    #TODO  - DEAL WITH VALUES > 0x1f!!
+	    signal = map(x->min(0x1f,x), signal)
+	    
+	    signal = Int8.(signal)-Int8.(15*ones(size(signal)))
+	    I = signal[1:2:length(signal)]
+	    Q = signal[2:2:length(signal)]
+	
+	    parsedRecord.key["I"] = length(parsedRecord.fields)+1;
+	    parsedRecord.key["Q"] = length(parsedRecord.fields)+2;
+	    push!(parsedRecord.fields, I)
+	    push!(parsedRecord.fields, Q)
+	    
+	    parsedRecord.fields[parsedRecord.key["signalData"]] = []  #remove original signalData from record!
+	    
+	    push!(signalRecords,parsedRecord)
+	    if(i%10000==0)
+	        print(i)
+	        print("   ")
+	        print(Base.summarysize(parsedRecord))
+	        print("B    ")
+	        print(Base.summarysize(signalRecords)/1e6)
+	        println(" MB")
+	    end
+	end
+	print(Base.summarysize(signalRecords)/1e6)
+	println(" MB")
+	
+	close(file)
+	
+	# save signalRecords for later use
+	Serialization.serialize(open("$pathname/$imagename-signal-records.ser","w"),signalRecords)
+	# TODO - had to comment this line for Pluto
+	#signalRecords = [];  # free up the memory of the signalRecords object - it'll be read back in later
+	signalRecords
+end
+
 # ╔═╡ cf1ce4e3-89f4-4857-922a-1efa34d76e92
 md"""
 ## Chirp Finding
 This stage produces a chirp signal that will deconvolve the IQ samples stored in the L1.0 file read in above. Cannot be skipped!
 """
 
-# ╔═╡ 323c60cf-9ad3-4845-a987-32417de259fa
-R0 = 848665     #m  
-altitude = 628000 #m, nominal
-c = 3e8
-
-vorbital = let 
-    a = (6371+628)*1000.0  #m            #https://www.eorc.jaxa.jp/ALOS-2/en/about/overview.htm
-    G = 6.67408e-11
-    Me= 5.97219e24       #kg
-    P = sqrt(4*pi^2/(G*Me)*a^3)
-    print("Period: ")
-    print(round(P/60,digits=4))
-    println(" m")
-    2pi*a/P            #These are terrible assumptions!!!!!!!
-end
-vorbital = 7593
-Vr = vorbital  # TODO: remove reference to redundant var Vr
-println("Orbital Velocity: ",vorbital," m/s")
-
-wavelength = parse(Float32,rec.fields[rec.key[  "wavelength" ]]) #m 
-#antenna length
-La = 8.9 #m
-
-#beamwidth
-bw = 0.886*wavelength/La
-
-# ╔═╡ b66bbf2b-82e5-4de8-9746-57ef6658c57f
-nadirAngle = acos(altitude/R0)
-println(nadirAngle*180/pi)
-RD = 1/2*c*rangeCells/16000000   # TODO where does 16,000,000 come from? 16 MHz sampling rate??
-rangeCellLength = 1/rangeCells * (sqrt((R0+RD)^2-altitude^2)-sqrt(R0^2-altitude^2))
-
-# compare the width and height of a pixel (cell)
-# to get an approximate scaling for image formation
-println("Azimuth:     ", round(vorbital/PRF, digits=3), " m")
-println("Range Cell: ",round(rangeCellLength, digits=3), " m")
-
-# approximate "y/x" scaling needed to render images without stretching
-aspectRatio = rangeCellLength/(vorbital/PRF)
-println("Aspect Ratio: ",round(aspectRatio,digits=1))
-
-# ╔═╡ fe02d877-0df0-4811-99e9-4a6640c81cf3
-md"""
-## Image Forming
-This stage converts the `...-signal-records.ser` object produced above into an early-stage image. The output of these blocks is a range-compressed complex image in a `.rcc` file.
-"""
-
-# ╔═╡ d95eaadd-f6ec-4c21-8488-6079963fb946
-# TODO: serialize smallSignals?
-#Serialization.serialize(open("$pathname/smallSignalsBigger.ser","w"),smallSignals)
-
-# ╔═╡ 4a80c281-68c0-48dd-ba3e-1031e289e70a
-md"""
-## Loading Range Corrected Complex Image File
-Can start here if a range-compressed complex image is already available from IMG-HH.rcc or similar.
-"""
-
-# ╔═╡ 5b131478-a2fd-48ba-91f2-83f551d74e12
-md"""
-### Range Cell Migration Correction
-Going to using the Range Doppler Algorithm. Take range compressed data, fourier transform along each line of constant range, then interpolate by a azimuth-frequency-dependent amount to correct for range cell migration.
-
-Could image at this point, but probably won't look different. 
-
-After that, do azimuth compression as usual. To be efficient, don't apply IFFT to RCM corrected data and instead use that direction in the azimuth convolutions.
-
-Range shift at each frequency is:
-$$\Delta R(f_n) = \frac{\lambda^2 R_0 f_n^2}{8 V_r^2}$$
-Where $R_0$ is the distance of closest approach, $V_r$ is the effective radar velocity (Cummings and Wong pg. 235)
-
-"""
-
-# ╔═╡ 551a1075-7536-44b3-a87e-4c0eab6c14ff
-md"""
-### Azimuth Compression!!
-need PRF, altitude, initial range, ground speed, wavelength
-$$R(s) = \sqrt{R_0^2+s^2v^2} = R_0+\dot{R}_0s+\frac{1}{2}\ddot{R}_0s^2$$
-$$C(s) = e^{i \frac{4\pi}{\lambda} R(s)}$$ (4pi comes from: phase shift due to distance is 2pi, but you go there and back so phase shift is doubled)
-Sample $C(s)$ at $s=n/PRF$
-
-For zero doppler shift (kinda naive case but fine), $\dot{R}_0 = 0$ and $\ddot{R}_0 = \frac{v^2}{R_0}$
-
-**Note:** this all only works for the first pixels!! Need to correct $R_0$ as we move out from the ground track.
-
-"""
-
-# ╔═╡ b74de37d-d437-4023-accf-796c9589851a
-begin
-	theta(s,R) = atan(vorbital*s/R)
-	
-	#one way beam pattern:
-	p(a) = sinc(a*La/wavelength)
-	w(s,R) = p(theta(s,R))^2
-	
-	Rc = R0+10000        # TODO where does 10000 come from? I think this is a focusing dist choice
-	
-	R(s) = Rc - 1/2*vorbital^2/Rc*s^2
-	
-	C(s) = exp(-4pi*im/wavelength*R(s))*w(s,Rc)
-	
-	complexAzimuthFFT = let
-	    width = 200   # TODO where does this come from?
-	    s = 1/PRF*(range(-width, stop = width) |> collect)
-	
-	    sig = C.(s)/sqrt(width)
-	    
-	    azimuth = vcat(sig, zeros(Complex{Float32},size(cimg)[1]-length(sig)))
-	
-	    fft(azimuth)
-	end
-	
-	print("Ready")
-end
-
-# ╔═╡ d44a11bd-2d77-4ad6-b60d-d9a463874f26
-md"## Images"
-
-# ╔═╡ 24eb33eb-3a64-4418-97be-5ae81a902d16
-imshow(rawMagnitude);             # show raw echo image
-
-
-# ╔═╡ fb598d4b-354d-4245-b7ff-e5c387849f00
-imshow(rangeCompressedMagnitude); # show range compressed image (chirp deconvolved)
-
-
-# ╔═╡ ba323a42-5a62-46a3-aabf-c133dd3b8683
-imshow(rccftpre);                 # show FFT of deconvolved image w/ RCM curves
-
-
-# ╔═╡ fe31f73b-4d40-4118-8985-4acbe07ceff3
-imshow(rccftpost);                # show FFT of deconvolved image w/ RCM curves corrected
-
-
-# ╔═╡ ce4aaa78-de6c-4fc7-9b71-ae57c66b48a7
-imshow(azcompmag);                # show final azimuth compressed image
-
-
-# ╔═╡ fe7e4e54-6115-4780-8d2b-684b5fc64e38
-imshow(log.(azcompmag));          # show log-scale final image
-
-
-# ╔═╡ 42512145-c04e-4545-9b75-4eb7f927c149
-azcomp = Serialization.deserialize(open("$pathname/$imagename.slc","r"));
-
-
-# ╔═╡ 90b23695-0354-4c08-bb4b-7ef4b03c567b
-# save range and azimuth compressed file as a "single-look complex"
-Serialization.serialize(open("$pathname/$imagename.slc","w"),azcomp)
-
-# ╔═╡ 9fda91dd-6f50-48b1-8b26-2e822562916d
-# show a subsection of the image at full resolution
-imshow(reverse(abs.(view(cimg,(1:4:10000).+16000,(1:1:1600).+1000)),dims=1));
-
-# ╔═╡ a68b1121-cf14-47cd-894c-68b64b27ad78
-begin
-	# load serialized version of signalRecords if not loaded from file above
-	signalRecords = Serialization.deserialize(open("$pathname/$imagename-signal-records.ser","r"))
-	print("Loaded signalRecords")
-end
-
-# ╔═╡ 9d59b5bd-e93b-4486-8dea-b733d6e19566
-begin
-	#now we want to shift each frequency in range space, so make each frequency bin a column for speed
-	cimg = cimg'
-	shape = size(cimg)
-	
-	slantRes = 1/2*c/sampleRate
-	
-	for i = 1:shape[2]
-	    n = i
-	    #the "highest frequencies" are actually the negative frequencies aliased up!
-	    if n>shape[2]/2
-	        n = shape[2]-i
-	    end
-	    fn = (n-1)/shape[2]*PRF    #check this but pretty sure
-	    
-	    #range migration distance in meters
-	    ΔR = wavelength^2*R0*fn^2/(8*Vr^2)
-	    cellshift = Integer(round(ΔR/slantRes))
-	    
-	    #interpolation
-	    #NEAREST NEIGHBOR - bad!
-	    cimg[:,i] = vcat(cimg[cellshift+1:shape[1],i],zeros(Complex{Float64},cellshift))
-	    
-	    if n%10000==0
-	        print(n)
-	        print("  ")
-	        println(cellshift)
-	    end
-	end
-	cimg = cimg'
-	println("Done")
-end
-
-# ╔═╡ 4f9be0f5-05fc-46fd-9ed8-428d281ebaf9
-# run an fft on each column of cimg (echos are rows here)
-cimg = Complex{Float16}.(fft(Complex{Float32}.(cimg),(1)));
-
-# ╔═╡ dec4f34e-b807-4306-97c7-38389a2c4689
-begin
-	# show fourier transformed cimg
-	# the curves that will be corrected
-	# by range cell migration should be visible
-	shape = size(cimg)
-	rccftpre = (abs.(view(cimg,
-	                2:100:shape[1],
-	                3600+54:1:3600+473)))
-	imshow(rccftpre);
-end
-
-# ╔═╡ 5ebaa4a6-4dd6-4c30-b6c1-b22fb34319af
-begin
-	#sub image formation:
-	sampleNum = rangeCells #how many samples of each echo to keep - keep all range cells by default
-	echoNum = 35000  #how many echos to keep
-	echostart = 1
-	
-	# smallSignals is matrix containing a subset (defined by sampleNum and echoNum)
-	# of the echo signals in signalRecords
-	smallSignals = zeros(Complex{Float16},sampleNum,echoNum)
-	
-	#This is soooooo much faster than hcatS!!!!
-	#https://stackoverflow.com/questions/38308053/julia-how-to-fill-a-matrix-row-by-row-in-julia
-	for i = echostart+1:echostart+echoNum
-	    line = signalRecords[i]
-	    I = Float16.(line.fields[line.key["I"]])
-	    Q = Float16.(line.fields[line.key["Q"]])
-	    
-	    smallSignals[:,i-echostart] = Complex.(I[1:sampleNum],Q[1:sampleNum])
-	end
-	
-	signalRecords = []  #free up signalRecords - now using smallSignals
-	
-	print("Done")
-end
-
-# ╔═╡ a4b94eea-6f4e-406c-96de-4b62cd3636fe
-begin
-	# deconvolution by the chirp signal
-	
-	shape = size(smallSignals)
-	
-	# add zero padding at the beginning of each pulse echo (each column is an echo)
-	cimg = vcat(zeros(Complex{Float32},(pulseSamples,shape[2])),
-	             Complex{Float32}.(smallSignals));
-	
-	fft!(cimg,(1)); # perform an FFT on each column (each pulse echo)
-	
-	cimg =  cimg .* conj.(chirpFFT) ; # convolution with chirp signal performed in frequency domain
-	
-	ifft!(cimg,(1)); # perform an inverse FFT on each column (each pulse echo)
-	cimg = Complex{Float16}.(cimg');  #transpose so that each echo is a horizontal line
-	smallSignals = [] # free up memory of smallSignals
-end
+# ╔═╡ 8cbcccbe-df28-4cd0-9e65-d6846474d97e
+rangeCells = 5000
 
 # ╔═╡ f1808c4f-fd2e-45cc-9f3f-5eb387fa9cfd
-begin
+rec, PRF, sampleRate, pulseSamples, chirpFFT = let
 	file = open("$pathname/LED.0__A")
 	rec = parseFile(file,datasetSummaryRecordScheme,720)
 	close(file)
 	
 	PRF = parse(Float64,rec.fields[rec.key["PRF"]])/1000
-	rangeCells = 5000
-	
 	
 	sampleRate = parse(Float64,rec.fields[rec.key["samplingRate"]])*1e6     #Hz
 	pulseSamples = let
@@ -437,30 +234,295 @@ begin
 	end
 	
 	print("Ready")
+
+	rec, PRF, sampleRate, pulseSamples, chirpFFT
 end
 
-# ╔═╡ 0604faa5-c48a-4b5b-84c2-15f05785238f
+# ╔═╡ 323c60cf-9ad3-4845-a987-32417de259fa
 begin
+	R0 = 848665     #m  
+	altitude = 628000 #m, nominal
+	c = 3e8
+	
+	vorbital = let 
+	    a = (6371+628)*1000.0  #m            #https://www.eorc.jaxa.jp/ALOS-2/en/about/overview.htm
+	    G = 6.67408e-11
+	    Me= 5.97219e24       #kg
+	    P = sqrt(4*pi^2/(G*Me)*a^3)
+	    print("Period: ")
+	    print(round(P/60,digits=4))
+	    println(" m")
+	    2pi*a/P            #These are terrible assumptions!!!!!!!
+	end
+	vorbital = 7593
+	Vr = vorbital  # TODO: remove reference to redundant var Vr
+	println("Orbital Velocity: ",vorbital," m/s")
+	
+	wavelength = parse(Float32,rec.fields[rec.key[  "wavelength" ]]) #m 
+	#antenna length
+	La = 8.9 #m
+	
+	#beamwidth
+	bw = 0.886*wavelength/La
+end
+
+# ╔═╡ b66bbf2b-82e5-4de8-9746-57ef6658c57f
+begin
+	nadirAngle = acos(altitude/R0)
+	println(nadirAngle*180/pi)
+	RD = 1/2*c*rangeCells/16000000   # TODO where does 16,000,000 come from? 16 MHz sampling rate??
+	rangeCellLength = 1/rangeCells * (sqrt((R0+RD)^2-altitude^2)-sqrt(R0^2-altitude^2))
+	
+	# compare the width and height of a pixel (cell)
+	# to get an approximate scaling for image formation
+	println("Azimuth:     ", round(vorbital/PRF, digits=3), " m")
+	println("Range Cell: ",round(rangeCellLength, digits=3), " m")
+	
+	# approximate "y/x" scaling needed to render images without stretching
+	aspectRatio = rangeCellLength/(vorbital/PRF)
+	println("Aspect Ratio: ",round(aspectRatio,digits=1))
+end
+
+# ╔═╡ fe02d877-0df0-4811-99e9-4a6640c81cf3
+md"""
+## Image Forming
+This stage converts the `...-signal-records.ser` object produced above into an early-stage image. The output of these blocks is a range-compressed complex image in a `.rcc` file.
+"""
+
+# ╔═╡ a68b1121-cf14-47cd-894c-68b64b27ad78
+begin
+	# TODO - in the ipynb one we serialized this. In pluto, so far we aren't
+	# load serialized version of signalRecords if not loaded from file above
+	#signalRecords = Serialization.deserialize(open("$pathname/$imagename-signal-records.ser","r"))
+	print("Loaded signalRecords")
+end
+
+# ╔═╡ 5ebaa4a6-4dd6-4c30-b6c1-b22fb34319af
+begin
+	#sub image formation:
+	sampleNum = rangeCells #how many samples of each echo to keep - keep all range cells by default
+	echoNum = 35000  #how many echos to keep
+	echostart = 1
+	
+	# smallSignals is matrix containing a subset (defined by sampleNum and echoNum)
+	# of the echo signals in signalRecords
+	smallSignals = zeros(Complex{Float16},sampleNum,echoNum)
+	
+	#This is soooooo much faster than hcatS!!!!
+	#https://stackoverflow.com/questions/38308053/julia-how-to-fill-a-matrix-row-by-row-in-julia
+	for i = echostart+1:echostart+echoNum
+	    line = signalRecords[i]
+	    I = Float16.(line.fields[line.key["I"]])
+	    Q = Float16.(line.fields[line.key["Q"]])
+	    
+	    smallSignals[:,i-echostart] = Complex.(I[1:sampleNum],Q[1:sampleNum])
+	end
+
+	# TODO - had to free this up in ipynb, skipping for now in pluto
+	#signalRecords = []  #free up signalRecords - now using smallSignals
+	
+	print("Done")
+end
+
+# ╔═╡ d95eaadd-f6ec-4c21-8488-6079963fb946
+# TODO: serialize smallSignals?
+#Serialization.serialize(open("$pathname/smallSignalsBigger.ser","w"),smallSignals)
+
+# ╔═╡ 5780e24c-8cf2-403b-af60-8f1f8134cd20
+begin
+	shape = size(smallSignals)
+	rawMagnitude = abs.(view(smallSignals,1:10:shape[1],1:40:shape[2]));
+	rawMagnitude = reverse(rawMagnitude,dims=1)
+	imshow(rawMagnitude);
+	# TODO: might want to extend the width of the image by pulseSamples before downsizing,
+	# as was done in the original version. See snippet below:
+	# vcat(zeros(Complex{Float16},pulseSamples),smallSignals[:,i])
+end
+
+# ╔═╡ a4b94eea-6f4e-406c-96de-4b62cd3636fe
+begin
+	# deconvolution by the chirp signal
+	# TODO - this is already done above, so commented here
+	#shape = size(smallSignals)
+	
+	# add zero padding at the beginning of each pulse echo (each column is an echo)
+	cimg = vcat(zeros(Complex{Float32},(pulseSamples,shape[2])),
+	             Complex{Float32}.(smallSignals));
+	
+	fft!(cimg,(1)); # perform an FFT on each column (each pulse echo)
+	
+	cimg =  cimg .* conj.(chirpFFT) ; # convolution with chirp signal performed in frequency domain
+	
+	ifft!(cimg,(1)); # perform an inverse FFT on each column (each pulse echo)
+	cimg = Complex{Float16}.(cimg');  #transpose so that each echo is a horizontal line
+	# TODO - previously free this up, skipping for now
+	#smallSignals = [] # free up memory of smallSignals
+end
+
+# ╔═╡ 85355608-83af-4f20-8bdf-4d485aed6578
+let
+	shape = size(cimg)
+	rangeCompressedMagnitude = abs.(view(cimg,1:40:shape[1],1:10:shape[2]));
+	rangeCompressedMagnitude = reverse(rangeCompressedMagnitude,dims=1)
+	imshow(rangeCompressedMagnitude);
+	Gray.(rangeCompressedMagnitude/maximum(rangeCompressedMagnitude))
+end
+
+# ╔═╡ bf110ea9-0741-4d7a-aaa8-5f582f7b7b25
+begin
+	Serialization.serialize(open("$pathname/$imagename.rcc","w"),cimg)
+	# TODO - cimg is cleared and GCed in ipynb, skipping for now in Pluto
+	#cimg = [];
+	#GC.gc();
+end
+
+# ╔═╡ 4a80c281-68c0-48dd-ba3e-1031e289e70a
+md"""
+## Loading Range Corrected Complex Image File
+Can start here if a range-compressed complex image is already available from IMG-HH.rcc or similar.
+"""
+
+# ╔═╡ c855ab71-65e6-4805-8d09-ba8b028f80af
+begin
+	# TODO - cimg was unloaded in the ipynb version, not needed in pluto
+	#cimg = Serialization.deserialize(open("$pathname/$imagename.rcc","r"))
+	print("Loaded")
+end
+
+# ╔═╡ 5b131478-a2fd-48ba-91f2-83f551d74e12
+md"""
+### Range Cell Migration Correction
+Going to using the Range Doppler Algorithm. Take range compressed data, fourier transform along each line of constant range, then interpolate by a azimuth-frequency-dependent amount to correct for range cell migration.
+
+Could image at this point, but probably won't look different. 
+
+After that, do azimuth compression as usual. To be efficient, don't apply IFFT to RCM corrected data and instead use that direction in the azimuth convolutions.
+
+Range shift at each frequency is:
+$$\Delta R(f_n) = \frac{\lambda^2 R_0 f_n^2}{8 V_r^2}$$
+Where $R_0$ is the distance of closest approach, $V_r$ is the effective radar velocity (Cummings and Wong pg. 235)
+
+"""
+
+# ╔═╡ 4f9be0f5-05fc-46fd-9ed8-428d281ebaf9
+# run an fft on each column of cimg (echos are rows here)
+cimg16 = Complex{Float16}.(fft(Complex{Float32}.(cimg),(1)));
+
+# ╔═╡ dec4f34e-b807-4306-97c7-38389a2c4689
+let
 	# show fourier transformed cimg
 	# the curves that will be corrected
 	# by range cell migration should be visible
+	shape = size(cimg16)
+	rccftpre = (abs.(view(cimg16,
+	                2:100:shape[1],
+	                3600+54:1:3600+473)))
+	imshow(rccftpre);
+end
+
+# ╔═╡ 9d59b5bd-e93b-4486-8dea-b733d6e19566
+let
+	#now we want to shift each frequency in range space, so make each frequency bin a column for speed
+	cimg = cimg16'
 	shape = size(cimg)
+	
+	slantRes = 1/2*c/sampleRate
+	
+	for i = 1:shape[2]
+	    n = i
+	    #the "highest frequencies" are actually the negative frequencies aliased up!
+	    if n>shape[2]/2
+	        n = shape[2]-i
+	    end
+	    fn = (n-1)/shape[2]*PRF    #check this but pretty sure
+	    
+	    #range migration distance in meters
+	    ΔR = wavelength^2*R0*fn^2/(8*Vr^2)
+	    cellshift = Integer(round(ΔR/slantRes))
+	    
+	    #interpolation
+	    #NEAREST NEIGHBOR - bad!
+	    cimg[:,i] = vcat(cimg[cellshift+1:shape[1],i],zeros(Complex{Float64},cellshift))
+	    
+	    if n%10000==0
+	        print(n)
+	        print("  ")
+	        println(cellshift)
+	    end
+	end
+	cimg = cimg'
+	println("Done")
+end
+
+# ╔═╡ 0604faa5-c48a-4b5b-84c2-15f05785238f
+rccftpost = let
+	# show fourier transformed cimg
+	# the curves that will be corrected
+	# by range cell migration should be visible
+	shape = size(cimg16)
 	rccftpost = (abs.(view(cimg,
 	                2:100:shape[1],
 	                3600+54:1:3600+473)))
-	imshow(rccftpost);
+	
+end
+
+# ╔═╡ 681bf972-5d6e-45da-aef5-294ef4ab546e
+imshow(rccftpost);
+
+# ╔═╡ 551a1075-7536-44b3-a87e-4c0eab6c14ff
+md"""
+### Azimuth Compression!!
+need PRF, altitude, initial range, ground speed, wavelength
+$$R(s) = \sqrt{R_0^2+s^2v^2} = R_0+\dot{R}_0s+\frac{1}{2}\ddot{R}_0s^2$$
+$$C(s) = e^{i \frac{4\pi}{\lambda} R(s)}$$ (4pi comes from: phase shift due to distance is 2pi, but you go there and back so phase shift is doubled)
+Sample $C(s)$ at $s=n/PRF$
+
+For zero doppler shift (kinda naive case but fine), $\dot{R}_0 = 0$ and $\ddot{R}_0 = \frac{v^2}{R_0}$
+
+**Note:** this all only works for the first pixels!! Need to correct $R_0$ as we move out from the ground track.
+
+"""
+
+# ╔═╡ b74de37d-d437-4023-accf-796c9589851a
+complexAzimuthFFT = let
+	theta(s,R) = atan(vorbital*s/R)
+	
+	#one way beam pattern:
+	p(a) = sinc(a*La/wavelength)
+	w(s,R) = p(theta(s,R))^2
+	
+	Rc = R0+10000        # TODO where does 10000 come from? I think this is a focusing dist choice
+	
+	R(s) = Rc - 1/2*vorbital^2/Rc*s^2
+	
+	C(s) = exp(-4pi*im/wavelength*R(s))*w(s,Rc)
+	
+	complexAzimuthFFT = let
+	    width = 200   # TODO where does this come from?
+	    s = 1/PRF*(range(-width, stop = width) |> collect)
+	
+	    sig = C.(s)/sqrt(width)
+	    
+	    azimuth = vcat(sig, zeros(Complex{Float32},size(cimg16)[1]-length(sig)))
+	
+	    fft(azimuth)
+	end
+	
+	print("Ready")
+
+	complexAzimuthFFT
 end
 
 # ╔═╡ d1968e2c-e012-428b-bb19-df4b4ea7c311
-begin
-	for i = 1:size(cimg)[2]
-	    line = Complex{Float32}.(cimg[:,i])
+let
+	for i = 1:size(cimg16)[2]
+	    line = Complex{Float32}.(cimg16[:,i])
 	    
 	    ####### Azimuth Compression
 	    
 	    #lineFFT = fft(line)
-	    lineFFT = cimg[:,i]
-	    #lineFFT = fft(Complex{Float32}.(cimg[:,i]))
+	    lineFFT = cimg16[:,i]
+	    #lineFFT = fft(Complex{Float32}.(cimg16[:,i]))
 	    crossCorrelated = AbstractFFTs.ifft(conj.(complexAzimuthFFT).*lineFFT)
 	    
 	    ####### End Azimuth Compression
