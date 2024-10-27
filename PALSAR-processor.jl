@@ -554,13 +554,6 @@ azcompmag, mv_zoom = let
 	end
 	
 	shape = size(output)
-
-	# extract a lower-res version of the azimuth corrected output
-	# suitable for display.
-	# if you want the full-res output, comment out the `let` block
-	# and use the commentend `azcompmag = reverse(output,dims=1)` 
-	# line down below instead.
-
 	
 	azcompmag = reverse(output,dims=1)
 	
@@ -568,8 +561,12 @@ azcompmag, mv_zoom = let
 	# a high-res zoom in on martha's vineyard, for the Cape Cod Palsar pass
 	mv_zoom = view(azcompmag,(1:4:10000).+16000,(1:1:1600).+1000)
 
-	
-	azcompmag = abs.(view(azcompmag,1:16:shape[1],1:4:shape[2]));
+	# extract a lower-res version of the azimuth corrected output
+	# suitable for display.
+	# if you want the full-res output, comment out the 
+	# `azcompmag = view(azcompmag,1:16:shape[1],1:4:shape[2]);`
+	# line down below
+	azcompmag = view(azcompmag,1:16:shape[1],1:4:shape[2]);
 	
 	azcompmag, mv_zoom
 end;
