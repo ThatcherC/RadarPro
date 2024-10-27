@@ -413,54 +413,26 @@ begin
 	#GC.gc();
 end
 
-# ╔═╡ 4a80c281-68c0-48dd-ba3e-1031e289e70a
-md"""
-## Loading Range Corrected Complex Image File
-Can start here if a range-compressed complex image is already available from IMG-HH.rcc or similar.
-"""
-
-# ╔═╡ c855ab71-65e6-4805-8d09-ba8b028f80af
-begin
-	# TODO - cimg was unloaded in the ipynb version, not needed in pluto
-	#cimg = Serialization.deserialize(open("$pathname/$imagename.rcc","r"))
-	print("Loaded")
-end
-
-# ╔═╡ 5b131478-a2fd-48ba-91f2-83f551d74e12
-md"""
-### Range Cell Migration Correction
-Going to using the Range Doppler Algorithm. Take range compressed data, fourier transform along each line of constant range, then interpolate by a azimuth-frequency-dependent amount to correct for range cell migration.
-
-Could image at this point, but probably won't look different. 
-
-After that, do azimuth compression as usual. To be efficient, don't apply IFFT to RCM corrected data and instead use that direction in the azimuth convolutions.
-
-Range shift at each frequency is:
-$$\Delta R(f_n) = \frac{\lambda^2 R_0 f_n^2}{8 V_r^2}$$
-Where $R_0$ is the distance of closest approach, $V_r$ is the effective radar velocity (Cummings and Wong pg. 235)
-
-"""
-
 # ╔═╡ 4f9be0f5-05fc-46fd-9ed8-428d281ebaf9
 # run an fft on each column of cimg (echos are rows here)
-cimg16 = Complex{Float16}.(fft(Complex{Float32}.(cimg),(1)));
+cimgfft16 = Complex{Float16}.(fft(Complex{Float32}.(cimg),(1)));
 
 # ╔═╡ dec4f34e-b807-4306-97c7-38389a2c4689
 let
 	# show fourier transformed cimg
 	# the curves that will be corrected
 	# by range cell migration should be visible
-	shape = size(cimg16)
-	rccftpre = (abs.(view(cimg16,
+	shape = size(cimgfft16)
+	rccftpre = (abs.(view(cimgfft16,
 	                2:100:shape[1],
 	                3600+54:1:3600+473)))
-	imshow(rccftpre);
+	normalized_image(rccftpre)
 end
 
 # ╔═╡ 9d59b5bd-e93b-4486-8dea-b733d6e19566
-let
+cimg16rcc = let
 	#now we want to shift each frequency in range space, so make each frequency bin a column for speed
-	cimg = cimg16'
+	cimg = copy(cimgfft16')
 	shape = size(cimg)
 	
 	slantRes = 1/2*c/sampleRate
@@ -489,6 +461,7 @@ let
 	end
 	cimg = cimg'
 	println("Done")
+	cimg
 end
 
 # ╔═╡ 0604faa5-c48a-4b5b-84c2-15f05785238f
@@ -496,15 +469,15 @@ rccftpost = let
 	# show fourier transformed cimg
 	# the curves that will be corrected
 	# by range cell migration should be visible
-	shape = size(cimg16)
-	rccftpost = (abs.(view(cimg,
+	shape = size(cimg16rcc)
+	rccftpost = (abs.(view(cimg16rcc,
 	                2:100:shape[1],
 	                3600+54:1:3600+473)))
 	
 end
 
 # ╔═╡ 681bf972-5d6e-45da-aef5-294ef4ab546e
-imshow(rccftpost);
+normalized_image(rccftpost)
 
 # ╔═╡ 551a1075-7536-44b3-a87e-4c0eab6c14ff
 md"""
@@ -540,7 +513,7 @@ complexAzimuthFFT = let
 	
 	    sig = C.(s)/sqrt(width)
 	    
-	    azimuth = vcat(sig, zeros(Complex{Float32},size(cimg16)[1]-length(sig)))
+	    azimuth = vcat(sig, zeros(Complex{Float32},size(cimg16rcc)[1]-length(sig)))
 	
 	    fft(azimuth)
 	end
@@ -551,14 +524,15 @@ complexAzimuthFFT = let
 end
 
 # ╔═╡ d1968e2c-e012-428b-bb19-df4b4ea7c311
-let
-	for i = 1:size(cimg16)[2]
-	    line = Complex{Float32}.(cimg16[:,i])
+azcompmag = let
+	output = zero(cimg16rcc)
+	for i = 1:size(cimg16rcc)[2]
+	    line = Complex{Float32}.(cimg16rcc[:,i])
 	    
 	    ####### Azimuth Compression
 	    
 	    #lineFFT = fft(line)
-	    lineFFT = cimg16[:,i]
+	    lineFFT = cimg16rcc[:,i]
 	    #lineFFT = fft(Complex{Float32}.(cimg16[:,i]))
 	    crossCorrelated = AbstractFFTs.ifft(conj.(complexAzimuthFFT).*lineFFT)
 	    
