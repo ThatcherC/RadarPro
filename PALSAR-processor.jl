@@ -17,6 +17,9 @@ using Images
 # ╔═╡ 7d519ccc-2455-4a59-b7b1-4a9f7edf579c
 using PlutoUI
 
+# ╔═╡ 54173d9a-76bc-420a-9206-0e6e4d694474
+import Statistics.quantile
+
 # ╔═╡ 7dd4373d-c6a8-47fd-b74c-e70dcd58059b
 PlutoUI.TableOfContents()
 
@@ -328,12 +331,47 @@ end
 # TODO: serialize smallSignals?
 #Serialization.serialize(open("$pathname/smallSignalsBigger.ser","w"),smallSignals)
 
+# ╔═╡ 4a80c281-68c0-48dd-ba3e-1031e289e70a
+md"""
+## Loading Range Corrected Complex Image File
+Can start here if a range-compressed complex image is already available from IMG-HH.rcc or similar.
+"""
+
+# ╔═╡ c855ab71-65e6-4805-8d09-ba8b028f80af
+begin
+	# TODO - cimg was unloaded in the ipynb version, not needed in pluto
+	#cimg = Serialization.deserialize(open("$pathname/$imagename.rcc","r"))
+	print("Loaded")
+end
+
+# ╔═╡ 5b131478-a2fd-48ba-91f2-83f551d74e12
+md"""
+### Range Cell Migration Correction
+Going to using the Range Doppler Algorithm. Take range compressed data, fourier transform along each line of constant range, then interpolate by a azimuth-frequency-dependent amount to correct for range cell migration.
+
+Could image at this point, but probably won't look different. 
+
+After that, do azimuth compression as usual. To be efficient, don't apply IFFT to RCM corrected data and instead use that direction in the azimuth convolutions.
+
+Range shift at each frequency is:
+$$\Delta R(f_n) = \frac{\lambda^2 R_0 f_n^2}{8 V_r^2}$$
+Where $R_0$ is the distance of closest approach, $V_r$ is the effective radar velocity (Cummings and Wong pg. 235)
+
+"""
+
+# ╔═╡ e2346a20-2ed3-4dca-8173-2e89d77c76f1
+function normalized_image(array, quantiles=[0.01, 0.99])
+	min, max = quantile(array, quantiles)
+	range = max - min
+	Gray.( (array .- min) / range)
+end
+
 # ╔═╡ 5780e24c-8cf2-403b-af60-8f1f8134cd20
 begin
 	shape = size(smallSignals)
 	rawMagnitude = abs.(view(smallSignals,1:10:shape[1],1:40:shape[2]));
 	rawMagnitude = reverse(rawMagnitude,dims=1)
-	imshow(rawMagnitude);
+	normalized_image(rawMagnitude);
 	# TODO: might want to extend the width of the image by pulseSamples before downsizing,
 	# as was done in the original version. See snippet below:
 	# vcat(zeros(Complex{Float16},pulseSamples),smallSignals[:,i])
@@ -364,7 +402,6 @@ let
 	shape = size(cimg)
 	rangeCompressedMagnitude = abs.(view(cimg,1:40:shape[1],1:10:shape[2]));
 	rangeCompressedMagnitude = reverse(rangeCompressedMagnitude,dims=1)
-	imshow(rangeCompressedMagnitude);
 	Gray.(rangeCompressedMagnitude/maximum(rangeCompressedMagnitude))
 end
 
@@ -530,43 +567,45 @@ let
 	    
 	    #complex = Complex.(I,Q)
 	    result = abs.( crossCorrelated )
-	    cimg16[:,i] = result
+	    output[:,i] = result
 	    if i%1000 == 1
 	        print("#")
 	    end
 	end
 	
-	shape = size(cimg16)
-	azcompmag = abs.(view(cimg,1:16:shape[1],1:4:shape[2]));
+	shape = size(output)
+	azcompmag = abs.(view(output,1:16:shape[1],1:4:shape[2]));
 	azcompmag = reverse(azcompmag,dims=1)
-	imshow(azcompmag);
 end
+
+# ╔═╡ 2d5e31b4-d333-45a4-b1e1-df01ef8a7a0f
+normalized_image(azcompmag)
 
 # ╔═╡ d44a11bd-2d77-4ad6-b60d-d9a463874f26
 md"## Images"
 
 # ╔═╡ 24eb33eb-3a64-4418-97be-5ae81a902d16
-imshow(rawMagnitude)             # show raw echo image
+normalized_image(rawMagnitude)             # show raw echo image
 
 
 # ╔═╡ fb598d4b-354d-4245-b7ff-e5c387849f00
-imshow(rangeCompressedMagnitude); # show range compressed image (chirp deconvolved)
+normalized_image(rangeCompressedMagnitude); # show range compressed image (chirp deconvolved)
 
 
 # ╔═╡ ba323a42-5a62-46a3-aabf-c133dd3b8683
-imshow(rccftpre);                 # show FFT of deconvolved image w/ RCM curves
+normalized_image(rccftpre);                 # show FFT of deconvolved image w/ RCM curves
 
 
 # ╔═╡ fe31f73b-4d40-4118-8985-4acbe07ceff3
-imshow(rccftpost);                # show FFT of deconvolved image w/ RCM curves corrected
+normalized_image(rccftpost);                # show FFT of deconvolved image w/ RCM curves corrected
 
 
 # ╔═╡ ce4aaa78-de6c-4fc7-9b71-ae57c66b48a7
-imshow(azcompmag);                # show final azimuth compressed image
+normalized_image(azcompmag, [0.2,0.99])                # show final azimuth compressed image
 
 
 # ╔═╡ fe7e4e54-6115-4780-8d2b-684b5fc64e38
-imshow(log.(azcompmag));          # show log-scale final image
+normalized_image(log.(azcompmag), [0.2,0.99])          # show log-scale final image
 
 
 # ╔═╡ 42512145-c04e-4545-9b75-4eb7f927c149
@@ -579,7 +618,7 @@ Serialization.serialize(open("$pathname/$imagename.slc","w"),azcomp)
 
 # ╔═╡ 9fda91dd-6f50-48b1-8b26-2e822562916d
 # show a subsection of the image at full resolution
-imshow(reverse(abs.(view(cimg,(1:4:10000).+16000,(1:1:1600).+1000)),dims=1));
+normalized_image(reverse(abs.(view(azcompmag,(1:4:10000).+16000,(1:1:1600).+1000)),dims=1))
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -589,12 +628,14 @@ ImageView = "86fae568-95e7-573e-a6b2-d8a6b900c9ef"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
 FFTW = "~1.8.0"
 ImageView = "~0.12.6"
 Images = "~0.26.1"
 PlutoUI = "~0.7.52"
+Statistics = "~1.11.1"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -603,7 +644,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.11.1"
 manifest_format = "2.0"
-project_hash = "9791007626ad1b25017ce3d9aafd4a3d76d22261"
+project_hash = "d059c6cee88a6e91a5357a291236be1b75f5a20d"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2209,6 +2250,7 @@ version = "1.4.1+1"
 # ╠═2e1baf1a-93ca-11ef-3482-6184fb11d8fc
 # ╠═29c761f9-85ee-4243-9d47-f1c7608717c6
 # ╠═7d519ccc-2455-4a59-b7b1-4a9f7edf579c
+# ╠═54173d9a-76bc-420a-9206-0e6e4d694474
 # ╠═7dd4373d-c6a8-47fd-b74c-e70dcd58059b
 # ╠═4ed04bf8-eeee-4c2b-87d1-4517c9bfcc6c
 # ╠═dc7fbf03-372d-47b2-9423-44dd535dc39c
@@ -2220,7 +2262,7 @@ version = "1.4.1+1"
 # ╠═8fe67eea-1bea-4034-9d36-83bbfc67b202
 # ╠═22257b03-5b3b-45d2-beac-e4e760a227e9
 # ╠═a69a88e6-b776-4df8-abd7-0e1e51fb5205
-# ╠═85f42019-ef9c-4942-84e0-15165c9982a2
+# ╟─85f42019-ef9c-4942-84e0-15165c9982a2
 # ╠═8c0bd2ab-8b14-4375-bf7f-42e1e94dd6e4
 # ╟─cf1ce4e3-89f4-4857-922a-1efa34d76e92
 # ╠═8cbcccbe-df28-4cd0-9e65-d6846474d97e
@@ -2239,6 +2281,7 @@ version = "1.4.1+1"
 # ╠═c855ab71-65e6-4805-8d09-ba8b028f80af
 # ╟─5b131478-a2fd-48ba-91f2-83f551d74e12
 # ╠═4f9be0f5-05fc-46fd-9ed8-428d281ebaf9
+# ╠═e2346a20-2ed3-4dca-8173-2e89d77c76f1
 # ╠═dec4f34e-b807-4306-97c7-38389a2c4689
 # ╠═9d59b5bd-e93b-4486-8dea-b733d6e19566
 # ╠═0604faa5-c48a-4b5b-84c2-15f05785238f
@@ -2246,6 +2289,7 @@ version = "1.4.1+1"
 # ╟─551a1075-7536-44b3-a87e-4c0eab6c14ff
 # ╠═b74de37d-d437-4023-accf-796c9589851a
 # ╠═d1968e2c-e012-428b-bb19-df4b4ea7c311
+# ╠═2d5e31b4-d333-45a4-b1e1-df01ef8a7a0f
 # ╠═90b23695-0354-4c08-bb4b-7ef4b03c567b
 # ╠═d44a11bd-2d77-4ad6-b60d-d9a463874f26
 # ╠═24eb33eb-3a64-4418-97be-5ae81a902d16
