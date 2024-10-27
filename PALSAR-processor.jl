@@ -22,6 +22,9 @@ import Statistics.quantile
 # ╔═╡ 7dd4373d-c6a8-47fd-b74c-e70dcd58059b
 PlutoUI.TableOfContents()
 
+# ╔═╡ 8634576a-c8ba-45ed-96c1-7f6b11c5096c
+html"<button onclick='present()'>present</button>"
+
 # ╔═╡ 4ed04bf8-eeee-4c2b-87d1-4517c9bfcc6c
 begin
 	pathname = "Cape/"    # relative path of folder containing L1.0 data
@@ -1873,6 +1876,7 @@ version = "17.4.0+2"
 # ╠═7d519ccc-2455-4a59-b7b1-4a9f7edf579c
 # ╠═54173d9a-76bc-420a-9206-0e6e4d694474
 # ╠═7dd4373d-c6a8-47fd-b74c-e70dcd58059b
+# ╟─8634576a-c8ba-45ed-96c1-7f6b11c5096c
 # ╠═4ed04bf8-eeee-4c2b-87d1-4517c9bfcc6c
 # ╟─dc7fbf03-372d-47b2-9423-44dd535dc39c
 # ╠═f0ccf9eb-fa4e-4887-829e-bf56d24a49e1
