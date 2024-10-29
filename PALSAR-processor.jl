@@ -222,48 +222,68 @@ This stage produces a chirp signal that will deconvolve the IQ samples stored in
 rangeCells = 5000
 
 # ╔═╡ f1808c4f-fd2e-45cc-9f3f-5eb387fa9cfd
-rec, PRF, sampleRate, pulseSamples, chirpFFT = let
-	file = open("$pathname/LED.0__A")
-	rec = parseFile(file,datasetSummaryRecordScheme,720)
-	close(file)
-	
-	PRF = parse(Float64,rec.fields[rec.key["PRF"]])/1000
-	
-	sampleRate = parse(Float64,rec.fields[rec.key["samplingRate"]])*1e6     #Hz
-	pulseSamples = let
-	    pulseLength = parse(Float64,rec.fields[rec.key["pulseLength"]])*1e-6   #s
-	    #PRF = parse(Float64,rec.fields[rec.key["PRF"]])/1000
-	    Integer(floor(pulseLength*sampleRate))
+rec = let
+	ledfile = let
+		files = filter(s->startswith(s, "LED"), readdir(pathname))
+		if length(files)==1
+			files[1]
+		elseif length(files)==1
+			throw(ErrorException("No files starting with 'LED' found!"))
+		else
+			throw(ErrorException("More than one LED* file found!"))
+		end
 	end
-	
-	#process header
-	chirpFFT = let
-	    f = parse(Float64,split(rec.fields[rec.key["coeffs"]])[1])
-	    fdot = -parse(Float64,split(rec.fields[rec.key["coeffs"]])[2])
-	    sampleRate = parse(Float64,rec.fields[rec.key["samplingRate"]])*1e6     #Hz
-	    pulseLength = parse(Float64,rec.fields[rec.key["pulseLength"]])*1e-6   #s
-	    #PRF = parse(Float64,rec.fields[rec.key["PRF"]])/1000
-	    pulseSamples = Integer(floor(pulseLength*sampleRate))
-	    #pulseSamples = 400
-	    print("Max IF freq: ")
-	    println(fdot*pulseLength)
-	
-	    Sif(t) = exp(pi*im*fdot*t^2)
-	
-	    t = 1/sampleRate* (range(1, stop = pulseSamples) |> collect)
-	
-	    t = t.-maximum(t)/2
-	
-	    sig = Sif.(t)/sqrt(pulseSamples)
-	
-	    chirp = vcat(sig,zeros(Complex{Float32}, rangeCells))
-	
-	    fft(chirp)
+	rec = open("$pathname/$ledfile") do file
+		parseFile(file,datasetSummaryRecordScheme,720)
 	end
-	
-	print("Ready")
+	rec
+end
 
-	rec, PRF, sampleRate, pulseSamples, chirpFFT
+# ╔═╡ 1f0c17bd-f108-4c17-94e4-9de76c64a7b1
+PRF = parse(Float64,rec.fields[rec.key["PRF"]])/1000
+
+# ╔═╡ 62d8ec13-fa90-4bce-8a2a-0b45912e57d8
+sampleRate = parse(Float64,rec.fields[rec.key["samplingRate"]])*1e6     #Hz
+
+# ╔═╡ b9703418-3dd0-4b7a-be0a-b03f947c896b
+pulseSamples = let
+	pulseLength = parse(Float64,rec.fields[rec.key["pulseLength"]])*1e-6   #s
+	#PRF = parse(Float64,rec.fields[rec.key["PRF"]])/1000
+	Integer(floor(pulseLength*sampleRate))
+end
+
+# ╔═╡ 9c64d048-0aef-491f-8c37-83cc1543e771
+md"""
+Pulse Repetition Frequncy (Hz): $(round(PRF, digits=3))
+
+Sampling Rate (MHz): $(sampleRate*1e-6)
+
+Pulse Samples: $pulseSamples
+"""
+
+# ╔═╡ 24c171ea-2671-41f7-89f5-a5d95accb937
+chirpFFT = let
+	f = parse(Float64,split(rec.fields[rec.key["coeffs"]])[1])
+	fdot = -parse(Float64,split(rec.fields[rec.key["coeffs"]])[2])
+	sampleRate = parse(Float64,rec.fields[rec.key["samplingRate"]])*1e6     #Hz
+	pulseLength = parse(Float64,rec.fields[rec.key["pulseLength"]])*1e-6   #s
+	
+	pulseSamples = Integer(floor(pulseLength*sampleRate))
+	
+	print("Max IF freq: ")
+	println(fdot*pulseLength)
+
+	Sif(t) = exp(pi*im*fdot*t^2)
+
+	t = 1/sampleRate* (range(1, stop = pulseSamples) |> collect)
+
+	t = t.-maximum(t)/2
+
+	sig = Sif.(t)/sqrt(pulseSamples)
+
+	chirp = vcat(sig,zeros(Complex{Float32}, rangeCells))
+
+	fft(chirp)
 end
 
 # ╔═╡ 323c60cf-9ad3-4845-a987-32417de259fa
@@ -1899,7 +1919,10 @@ version = "17.4.0+2"
 # ╠═54173d9a-76bc-420a-9206-0e6e4d694474
 # ╠═7dd4373d-c6a8-47fd-b74c-e70dcd58059b
 # ╟─8634576a-c8ba-45ed-96c1-7f6b11c5096c
+# ╠═a7aa353f-3d1a-4343-a5d1-ca7adc19128f
 # ╠═4ed04bf8-eeee-4c2b-87d1-4517c9bfcc6c
+# ╠═b170e592-694f-4bf1-aa87-67769b16909b
+# ╠═60a9ad89-1aa5-483b-86c1-f74d9f502396
 # ╟─dc7fbf03-372d-47b2-9423-44dd535dc39c
 # ╠═f0ccf9eb-fa4e-4887-829e-bf56d24a49e1
 # ╠═f7774d31-8026-4e7d-a5ef-e902b6f0b67a
@@ -1914,6 +1937,11 @@ version = "17.4.0+2"
 # ╟─cf1ce4e3-89f4-4857-922a-1efa34d76e92
 # ╠═8cbcccbe-df28-4cd0-9e65-d6846474d97e
 # ╠═f1808c4f-fd2e-45cc-9f3f-5eb387fa9cfd
+# ╠═1f0c17bd-f108-4c17-94e4-9de76c64a7b1
+# ╠═62d8ec13-fa90-4bce-8a2a-0b45912e57d8
+# ╠═b9703418-3dd0-4b7a-be0a-b03f947c896b
+# ╟─9c64d048-0aef-491f-8c37-83cc1543e771
+# ╠═24c171ea-2671-41f7-89f5-a5d95accb937
 # ╠═323c60cf-9ad3-4845-a987-32417de259fa
 # ╠═b66bbf2b-82e5-4de8-9746-57ef6658c57f
 # ╟─fe02d877-0df0-4811-99e9-4a6640c81cf3
@@ -1948,7 +1976,6 @@ version = "17.4.0+2"
 # ╠═fe31f73b-4d40-4118-8985-4acbe07ceff3
 # ╠═ce4aaa78-de6c-4fc7-9b71-ae57c66b48a7
 # ╠═fe7e4e54-6115-4780-8d2b-684b5fc64e38
-# ╠═42512145-c04e-4545-9b75-4eb7f927c149
 # ╠═007f6eda-95cc-41c8-be32-97e4918ae23c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
