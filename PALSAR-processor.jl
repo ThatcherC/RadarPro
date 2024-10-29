@@ -25,10 +25,32 @@ PlutoUI.TableOfContents()
 # ╔═╡ 8634576a-c8ba-45ed-96c1-7f6b11c5096c
 html"<button onclick='present()'>present</button>"
 
+# ╔═╡ a7aa353f-3d1a-4343-a5d1-ca7adc19128f
+begin
+	d = readdir();
+
+	println("List of directories")
+	println("-------------")
+	println.(d[isdir.(d)])
+end;
+
 # ╔═╡ 4ed04bf8-eeee-4c2b-87d1-4517c9bfcc6c
 begin
 	pathname = "Cape/"    # relative path of folder containing L1.0 data
-	imagename = "IMG-HH"  # which image polarization to use - IMG-HH or IMG-HV for PALSAR
+	#pathname = "ALPSRP249621220-L1.0"
+end
+
+# ╔═╡ b170e592-694f-4bf1-aa87-67769b16909b
+begin
+	println("List of files")
+	println("----------")
+	println.(readdir(pathname))
+end
+
+# ╔═╡ 60a9ad89-1aa5-483b-86c1-f74d9f502396
+begin
+	# which image polarization to use - IMG-HH or IMG-HV for PALSAR
+	imagename = "IMG-HH"  
 end
 
 # ╔═╡ dc7fbf03-372d-47b2-9423-44dd535dc39c
