@@ -619,6 +619,10 @@ end;
 # ╔═╡ 2d5e31b4-d333-45a4-b1e1-df01ef8a7a0f
 normalized_image(azcompmag)
 
+# ╔═╡ 90b23695-0354-4c08-bb4b-7ef4b03c567b
+# save range and azimuth compressed file as a "single-look complex"
+#Serialization.serialize(open("$pathname/$imagename.slc","w"),azcomp)
+
 # ╔═╡ d44a11bd-2d77-4ad6-b60d-d9a463874f26
 md"## Images"
 
@@ -643,14 +647,6 @@ normalized_image(azcompmag, [0.2,0.99])                # show final azimuth comp
 # ╔═╡ fe7e4e54-6115-4780-8d2b-684b5fc64e38
 normalized_image(log.(azcompmag), [0.2,0.99])          # show log-scale final image
 
-
-# ╔═╡ 42512145-c04e-4545-9b75-4eb7f927c149
-azcomp = Serialization.deserialize(open("$pathname/$imagename.slc","r"));
-
-
-# ╔═╡ 90b23695-0354-4c08-bb4b-7ef4b03c567b
-# save range and azimuth compressed file as a "single-look complex"
-Serialization.serialize(open("$pathname/$imagename.slc","w"),azcomp)
 
 # ╔═╡ 007f6eda-95cc-41c8-be32-97e4918ae23c
 normalized_image(mv_zoom)
